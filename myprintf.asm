@@ -1,4 +1,13 @@
 section .rodata
+
+error_msg:              db "[Unknown format specifier: "
+error_msg_len           equ $ - error_msg
+close_bracket_msg:      db "] "                   
+close_bracket_len       equ $ - close_bracket_msg
+
+;=======================================================
+;                      JUMP TABLE
+;=======================================================
 jump_table:
                         dq case_percent         ; %
 times ('b' - '%' - 1)   dq case_default         ; skip useless [38-97 ASCII]
@@ -28,7 +37,7 @@ global  MyPrintf
 ;                 TRAMPLINE FOR CDeCL
 ;=======================================================
 MyPrintf:
-        pop r15
+        push r15
 
         push r9                                 ; push args for cdcle format
         push r8
@@ -40,19 +49,21 @@ MyPrintf:
         call cdcle_printf
 
         add rsp, 6 * 0x08
-        push r15
+        pop r15
 
         ret
 
 cdcle_printf:
         push rbp
-        mov  rbp, rsp
+        mov rbp, rsp
 
+        push rcx                        ; save
         push rbx
         push r10
 
-        xor rcx, rcx
-        mov rbx, [rbp + 0x10]                   ; format string
+        xor r10, r10                    ; r10 = 0 - not used (left it here in case % parameter counts as real one)
+        xor rcx, rcx                    ; rcx = 0
+        mov rbx, QWORD [rbp + 0x10]     ; rbx = format string
 
 .str_loop:
         cmp BYTE [rbx], '%'                     ; check if symb is specifier
@@ -209,7 +220,34 @@ L81: ; v
 L82: ; w ASCII 119
 
 case_default:
-        ; aboba
+        push rax
+        push rdi
+        push rsi
+        push rdx
+
+        mov rax, 0x01                    ; print the error message
+        mov rdi, 0x01
+        lea rsi, [error_msg]
+        mov rdx, error_msg_len
+        syscall
+
+        mov [char_buffer], bl            ; save unknown specificator
+        mov rax, 0x01
+        mov rdi, 0x01
+        mov rsi, char_buffer
+        mov rdx, 0x01                    ; print the unknown specificator
+        syscall
+
+        mov rax, 0x01
+        mov rdi, 0x01
+        lea rsi, [close_bracket_msg]
+        mov rdx, close_bracket_len
+        syscall                          ; print "] "
+
+        pop rdx
+        pop rsi
+        pop rdi
+        pop rax                          ; recover regs
 
         jmp switch_end
 
@@ -263,9 +301,8 @@ case_o:
         jmp switch_end
 
 case_s:
-        ;push QWORD [rbp + 0x18]
-        ;call puts_cdecl
-        ; TODO puts_cdecl
+        push QWORD [rbp + 0x18]
+        call puts
 
         add rsp, 0x08
 
@@ -382,8 +419,44 @@ print_dec:
 
         ret
 
-;puts:
-;
+puts:
+        push rbp
+        mov rbp, rsp
+
+        push rcx                        ; protect from syscall
+        push r11
+
+        push rax
+        push rdi
+        push rsi
+        push rbx
+        push rdx
+
+        mov rbx, [rbp + 0x10]
+
+.next:
+        mov rax, 0x01                   ; write64 (rdi, rsi, rax)
+        mov rdi, 0x01                   ; stdout fd
+        mov rsi, rbx                    ; curr string pos
+        mov rdx, 0x01                   ; display only 1 char
+        syscall
+        inc rbx
+
+        cmp BYTE [rbx], 0
+        jne .next
+
+        pop rdx
+        pop rbx
+        pop rsi
+        pop rdi
+        pop rax
+
+        pop r11
+        pop rcx
+
+        pop rbp
+
+        ret
 
 putchar:
         push rbp
