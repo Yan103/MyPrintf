@@ -2,7 +2,7 @@ section .rodata
 
 error_msg:              db "[Unknown format specifier: "
 error_msg_len           equ $ - error_msg
-close_bracket_msg:      db "] "                   
+close_bracket_msg:      db "] "
 close_bracket_len       equ $ - close_bracket_msg
 
 ;=======================================================
@@ -267,7 +267,10 @@ case_b:
         call putchar
         add rsp, 0x08
 
-        ; TODO print binary num
+        push 2
+        push QWORD [rbp + 0x18]
+        call convert_to_base
+        add rsp, 16
 
         jmp switch_end
 
@@ -296,7 +299,10 @@ case_o:
         call putchar
         add rsp, 0x08
 
-        ; TODO print oct num
+        push 8
+        push QWORD [rbp + 0x18]
+        call convert_to_base
+        add rsp, 16
 
         jmp switch_end
 
@@ -317,7 +323,10 @@ case_x:
         call putchar
         add rsp, 0x08
 
-        ; TODO print hex num
+        push 16
+        push QWORD [rbp + 0x18]
+        call convert_to_base
+        add rsp, 16
 
         jmp switch_end
 
@@ -494,15 +503,111 @@ putchar:
 
 clear_num_buffer:
         push rcx
-        mov rcx, BUFFER_SIZE
+        mov  rcx, BUFFER_SIZE
 
-.next:
-        mov BYTE [num_buffer + rcx - 1], 0
-        loop .next
+        lea rdi, [num_buffer]
+        xor rax, rax
+        rep stosb
 
         pop rcx
 
         ret
+
+convert_to_base:
+        push rbp
+        mov  rbp, rsp
+
+        push rax
+        push rcx
+        push r10
+        push r11
+        push r12
+        push rdx                        ; save regs
+
+        call clear_num_buffer
+
+        mov rax, [rbp + 0x10]   ; arg1 - number
+        xor rcx, rcx
+        xor r10, r10
+
+.nextdigit:                     ; put reversed representation of the number in buffer
+        mov rdx, rax
+
+        push rbx                ; save
+
+        mov rbx, [rbp + 0x18]   ; divide by 10
+        xor rdx, rdx
+        div rbx
+
+        pop rbx                 ; recover
+
+        cmp rdx, 0
+        je .put_digit
+
+        xor r10, r10
+        dec r10
+
+.put_digit:
+        cmp rdx, 10
+        jae .digit_is_letter
+
+        add rdx, '0'
+        jmp .put_digit_end
+
+.digit_is_letter:
+        add rdx, 'A' - 10
+        jmp .put_digit_end
+
+.put_digit_end:
+        mov BYTE [num_buffer + rcx], dl
+
+.loop_end:
+
+        inc r10
+        inc rcx
+
+        cmp rcx, BUFFER_SIZE
+        jne .nextdigit
+
+; write on screen
+        cmp r10, BUFFER_SIZE
+        jne .not_zero
+
+        push '0'
+        call putchar
+        add rsp, 0x08
+
+        jmp .func_end
+
+.not_zero:
+        mov rcx, BUFFER_SIZE
+        sub rcx, r10
+
+.display_digit:
+        lea r11, [num_buffer + rcx - 1]
+
+        xor rax, rax
+        mov al, BYTE [r11]
+
+        push rax
+        call putchar
+        add rsp, 0x08
+
+        loop .display_digit
+
+.func_end:
+
+        pop rdx
+        pop r12
+        pop r11
+        pop r10
+        pop rcx
+        pop rax
+
+        pop rbp
+
+        ret
+
 
 section .data
         char_buffer: db 0x00
