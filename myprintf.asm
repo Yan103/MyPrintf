@@ -3,10 +3,10 @@
 ;=======================================================
 section .rodata
 
-error_msg:              db "[Unknown format specifier: "
-error_msg_len           equ $ - error_msg
-close_bracket_msg:      db "] "
-close_bracket_len       equ $ - close_bracket_msg
+error_msg:              db "[Unknown format specifier: %", 0
+error_msg_len           equ $ - error_msg - 1
+close_bracket_msg:      db "]", 0
+close_bracket_len       equ $ - close_bracket_msg - 1
 space:                  db ' '
 
 ;=======================================================
@@ -31,13 +31,14 @@ times ('x' - 's' - 1)   dq case_default         ; skip useless [115-119 ASCII]
 
 
 section .text
+extern ArgumentCount                            ; My extern function
 
 ;=======================================================
 ;                 MY PRINTF FUNCTION
 ;       %%, %c, %d, %s, %b, %o, %x specificators
 ;=======================================================
 
-global  MyPrintf
+global MyPrintf
 
 ;=======================================================
 ;                 TRAMPLINE FOR CDECL
@@ -111,10 +112,15 @@ cdcle_printf:
         inc rcx                                 ; increase number of processed specifiers
         jmp .str_loop_end
 
-        jmp .end                                ; kinda silly precaution
+        jmp .end
 
 .end:
         call flush_buffer
+
+        push rcx
+        mov  rdi, rcx                           ; read specifiers count
+        call ArgumentCount                      ; call extern function
+        pop rcx
 
         mov rax, rcx                            ; return value
 
@@ -136,7 +142,7 @@ handle_specifier:
         push rbx
         push rcx
 
-        mov rbx, [rbp + 0x10]                   ; spec symbol
+        mov rbx, [rbp + 0x10]                   ; specificator 
 
         mov cl, BYTE [rbx]
         xor rbx, rbx
@@ -146,7 +152,6 @@ handle_specifier:
 
         cmp rbx, '%'                            ; the least ASCII code
         jb case_default
-
         cmp rbx, 'x'                            ; the greates ASCII code among all spec symbs
         ja case_default
 
@@ -230,35 +235,52 @@ L80: ; u
 L81: ; v
 L82: ; w ASCII 119
 
+; in default case MyPrintf show which specificator it do not recognize
 case_default:
-        push rax                         ; save regs
-        push rdi
+        push rax                        ; save regs
+        push rbx
         push rsi
         push rdx
 
-        mov rax, 0x01                    ; print the error message
-        mov rdi, 0x01
-        lea rsi, [error_msg]
-        mov rdx, error_msg_len
-        syscall
+        mov rsi, error_msg
 
-        mov [char_buffer], bl            ; save unknown specificator
-        mov rax, 0x01
-        mov rdi, 0x01
-        mov rsi, char_buffer
-        mov rdx, 0x01                    ; print the unknown specificator
-        syscall
+.error_loop:
+        movzx eax, BYTE [rsi]
+        test al, al
+        jz .error_spec_output
 
-        mov rax, 0x01
-        mov rdi, 0x01
-        lea rsi, [close_bracket_msg]
-        mov rdx, close_bracket_len
-        syscall                          ; print "] "
+        push rax
+        call putchar
+        add rsp, 8
+        inc rsi
+        jmp .error_loop
 
+.error_spec_output:
+        movzx eax, bl
+
+        push rax
+        call putchar
+        add rsp, 8
+
+        mov rsi, close_bracket_msg
+
+.close_loop:
+        movzx eax, BYTE [rsi]
+        test al, al
+        jz .end_error
+
+        push rax
+        call putchar
+        add rsp, 8
+
+        inc rsi
+        jmp .close_loop
+
+.end_error:
         pop rdx
         pop rsi
-        pop rdi
-        pop rax                          ; recover regs
+        pop rbx
+        pop rax
 
         jmp switch_end
 
@@ -675,7 +697,6 @@ flush_buffer:
         pop rbp
 
         ret
-
 
 ;=======================================================
 ;                     DATA SECTION
