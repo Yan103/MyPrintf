@@ -44,7 +44,7 @@ global MyPrintf
 ;                 TRAMPLINE FOR CDECL
 ;=======================================================
 MyPrintf:
-        push r15                                ; return address
+        pop r15                                ; return address
 
         push r9                                 ; push args for cdecl format
         push r8
@@ -56,7 +56,7 @@ MyPrintf:
         call cdcle_printf                       ; call MyPrintf with CDECL
 
         add rsp, 6 * 0x08
-        pop r15                                 ; restore
+        push r15                                 ; restore
 
         ret
 
@@ -142,7 +142,7 @@ handle_specifier:
         push rbx
         push rcx
 
-        mov rbx, [rbp + 0x10]                   ; specificator 
+        mov rbx, [rbp + 0x10]                   ; specificator
 
         mov cl, BYTE [rbx]
         xor rbx, rbx
@@ -703,7 +703,7 @@ flush_buffer:
 ;=======================================================
 section .data
         char_buffer: db 0x00
-        BUFFER_SIZE equ 64
+        BUFFER_SIZE equ 128
         num_buffer: times (BUFFER_SIZE) db 0x00
         buffer: times (BUFFER_SIZE) db 0x00
         buffer_pos: dq 0x00

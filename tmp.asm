@@ -31,13 +31,14 @@ times ('x' - 's' - 1)   dq case_default         ; skip useless [115-119 ASCII]
 
 
 section .text
+extern ArgumentCount                            ; My extern function
 
 ;=======================================================
 ;                 MY PRINTF FUNCTION
 ;       %%, %c, %d, %s, %b, %o, %x specificators
 ;=======================================================
 
-global  MyPrintf
+global MyPrintf
 
 ;=======================================================
 ;                 TRAMPLINE FOR CDECL
@@ -111,10 +112,15 @@ cdcle_printf:
         inc rcx                                 ; increase number of processed specifiers
         jmp .str_loop_end
 
-        jmp .end                                ; kinda silly precaution
+        jmp .end
 
 .end:
         call flush_buffer
+
+        push rcx
+        mov  rdi, rcx                           ; read specifiers count
+        call ArgumentCount                      ; call extern function
+        pop rcx
 
         mov rax, rcx                            ; return value
 
@@ -136,7 +142,7 @@ handle_specifier:
         push rbx
         push rcx
 
-        mov rbx, [rbp + 0x10]                   ; spec symbol
+        mov rbx, [rbp + 0x10]                   ; specificator
 
         mov cl, BYTE [rbx]
         xor rbx, rbx
@@ -697,7 +703,7 @@ flush_buffer:
 ;=======================================================
 section .data
         char_buffer: db 0x00
-        BUFFER_SIZE equ 64
+        BUFFER_SIZE equ 128
         num_buffer: times (BUFFER_SIZE) db 0x00
         buffer: times (BUFFER_SIZE) db 0x00
         buffer_pos: dq 0x00
